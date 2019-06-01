@@ -1,66 +1,60 @@
-import os, sys
+#Python libraries that we need to import for our bot
+import random
 from flask import Flask, request
-from utils import wit_response
-from pymessenger import Bot
-
+from pymessenger.bot import Bot
+import os 
 app = Flask(__name__)
+ACCESS_TOKEN = 'EAAGG3YyUWAwBACZByLG68WtxM1Wll2LkbWZAXItUuFXJDiUxZCsZCD5IZCIwe7n0LKl0HdghmNSznE1RQyt7kdMF9gBECgPmFZBXqe3RC62pADZBP5zyuqTxXvzdchEbiOVL2zPh2TAbZAMrUjMsy2h0tk2cZCSObk51KSFHOzDKtPQ9asZBZBZChs3B'   #ACCESS_TOKEN = os.environ['ACCESS_TOKEN']
+VERIFY_TOKEN = 'hello'   #VERIFY_TOKEN = os.environ['VERIFY_TOKEN']
+bot = Bot (ACCESS_TOKEN)
 
-PAGE_ACCESS_TOKEN = "EAAGG3YyUWAwBABeIZABZAqnTTKd5lpFZBxLI7RcpwQvGyXj4rjuCn3ZBbBmWW7mx4cpjNEDGmo7MluBhZBV6XOpYnBjqZBhdbYV9PCZAKFftCHPFKflYDU0JoRs5IHNEqnjFLVufrDAZCcOMcJNvmZCnb6HqAOsS4eOe4eMyeKZCYtpNgOZAgVhoHfw"
-
-bot = Bot(PAGE_ACCESS_TOKEN)
-
-
-@app.route('/', methods=['GET'])
-def verify():
-	# Webhook verification
-    if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.challenge"):
-        if not request.args.get("hub.verify_token") == "hello":
-            return "Verification token mismatch", 403
-        return request.args["hub.challenge"], 200
-    return "Hello world", 200
-
-
-@app.route('/', methods=['POST'])
-def webhook():
-	data = request.get_json()
-	log(data)
-	return "ok",200
-
-	# if data['object'] == 'page':
-	# 	for entry in data['entry']:
-	# 		for messaging_event in entry['messaging']:
-
-	# 			# IDs
-	# 			sender_id = messaging_event['sender']['id']
-	# 			recipient_id = messaging_event['recipient']['id']
-
-	# 			if messaging_event.get('message'):
-	# 				# Extracting text message
-	# 				if 'text' in messaging_event['message']:
-	# 					messaging_text = messaging_event['message']['text']
-	# 				else:
-	# 					messaging_text = 'no text'
-
-	# 				response = None
-
-	# 				entity, value = wit_response(messaging_text)
-	# 				if entity == 'newstype':
-	# 					response = "Ok, I will send you the {} news".format(str(value))
-	# 				elif entity == 'location':
-	# 					response = "Ok, so you live in {0}. Here are top headlines from {0}".format(str(value))
-
-	# 				if response == None:
-	# 					response = "I have no idea what you are saying!"
-						
-	# 				bot.send_text_message(sender_id, response)
-
-	# return "ok", 200
+#We will receive messages that Facebook sends our bot at this endpoint 
+@app.route("/", methods=['GET', 'POST'])
+def receive_message():
+    if request.method == 'GET':
+        """Before allowing people to message your bot, Facebook has implemented a verify token
+        that confirms all requests that your bot receives came from Facebook.""" 
+        token_sent = request.args.get("hub.verify_token")
+        return verify_fb_token(token_sent)
+    #if the request was not get, it must be POST and we can just proceed with sending a message back to user
+    else:
+        # get whatever message a user sent the bot
+       output = request.get_json()
+       for event in output['entry']:
+          messaging = event['messaging']
+          for message in messaging:
+            if message.get('message'):
+                #Facebook Messenger ID for user so we know where to send response back to
+                recipient_id = message['sender']['id']
+                if message['message'].get('text'):
+                    response_sent_text = get_message()
+                    send_message(recipient_id, response_sent_text)
+                #if user sends us a GIF, photo,video, or any other non-text item
+                if message['message'].get('attachments'):
+                    response_sent_nontext = get_message()
+                    send_message(recipient_id, response_sent_nontext)
+    return "Message Processed"
 
 
-def log(message):
-	print(message)
-	sys.stdout.flush()
+def verify_fb_token(token_sent):
+    #take token sent by facebook and verify it matches the verify token you sent
+    #if they match, allow the request, else return an error 
+    if token_sent == VERIFY_TOKEN:
+        return request.args.get("hub.challenge")
+    return 'Invalid verification token'
 
+
+#chooses a random message to send to the user
+def get_message():
+    sample_responses = ["You are stunning!", "We're proud of you.", "Keep on being you!", "We're greatful to know you :)"]
+    # return selected item to the user
+    return random.choice(sample_responses)
+
+#uses PyMessenger to send response to user
+def send_message(recipient_id, response):
+    #sends user the text message provided via input response parameter
+    bot.send_text_message(recipient_id, response)
+    return "success"
 
 if __name__ == "__main__":
-	app.run(debug = True, port = 80)
+    app.run()
